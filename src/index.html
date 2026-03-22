@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Folio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Overpass+Mono:wght@300;400&display=swap" rel="stylesheet">
+<script src="jszip.min.js">
+// Called from main process when update is downloaded
+function showUpdateBanner() {
+  document.getElementById('updateBanner').classList.add('visible');
+}
+</script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #f5f0e8;
+  --text: #1a1714;
+  --muted: #8a8070;
+  --surface: #ede8de;
+  --border: rgba(26,23,20,0.1);
+  --prog-bg: rgba(26,23,20,0.07);
+  --shadow: 0 4px 24px rgba(0,0,0,0.09);
+  --fs: 18px;
+  --lh: 1.85;
+  --mw: 640px;
+  --titlebar: 40px;
+}
+[data-theme="dark"] {
+  --bg: #0f0e0d;
+  --text: #e8e2d8;
+  --muted: #4a4640;
+  --surface: #181614;
+  --border: rgba(232,226,216,0.07);
+  --prog-bg: rgba(232,226,216,0.05);
+  --shadow: 0 4px 32px rgba(0,0,0,0.5);
+}
+
+html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Lora', Georgia, serif; transition: background 0.3s, color 0.3s; }
+
+/* TITLEBAR */
+#titlebar {
+  height: var(--titlebar);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  -webkit-app-region: drag;
+  flex-shrink: 0;
+  position: relative; z-index: 300;
+}
+.tb-logo {
+  font-family: 'Overpass Mono', monospace;
+  font-size: 0.6rem; letter-spacing: 0.5em;
+  text-transform: uppercase; color: var(--text);
+  padding: 0 1rem;
+  -webkit-app-region: no-drag;
+  user-select: none;
+  opacity: 0.6;
+}
+.tb-spacer { flex: 1; }
+.win-btns { display: flex; -webkit-app-region: no-drag; height: 100%; }
+.win-btn {
+  width: 46px; height: 100%;
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 0.7rem;
+  transition: background 0.15s, color 0.15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.win-btn:hover { background: var(--prog-bg); color: var(--text); }
+.win-btn.close:hover { background: #c0392b; color: #fff; }
+.win-btn svg { width: 11px; height: 11px; }
+
+/* APP SHELL */
+#app { display: flex; height: calc(100vh - var(--titlebar)); }
+
+/* LIBRARY */
+#library { width: 100%; height: 100%; display: flex; flex-direction: column; overflow: hidden; }
+#library.hidden { display: none; }
+
+.lib-header { padding: 2rem 2.5rem 1rem; display: flex; align-items: baseline; gap: 1.5rem; }
+.lib-title { font-family: 'Overpass Mono', monospace; font-size: 0.65rem; letter-spacing: 0.4em; text-transform: uppercase; color: var(--muted); }
+.lib-count { font-family: 'Overpass Mono', monospace; font-size: 0.6rem; color: var(--muted); }
+.lib-actions { margin-left: auto; display: flex; gap: 0.75rem; }
+.lib-btn {
+  background: none; border: 1px solid var(--border); border-radius: 3px; color: var(--text);
+  font-family: 'Overpass Mono', monospace; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase;
+  padding: 0.5rem 1rem; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.lib-btn:hover { border-color: var(--text); background: var(--prog-bg); }
+.lib-btn svg { width: 14px; height: 14px; }
+
+#bookGrid {
+  flex: 1; overflow-y: auto; padding: 1rem 2rem 3rem;
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 2rem 1.5rem; align-content: start;
+}
+
+#emptyState {
+  grid-column: 1/-1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1.5rem; padding: 6rem 2rem;
+}
+#emptyState .es-icon { opacity: 0.15; }
+#emptyState .es-icon svg { width: 80px; height: 80px; }
+#emptyState p { font-family: 'Overpass Mono', monospace; font-size: 0.65rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--muted); text-align: center; line-height: 2; }
+.es-add { background: none; border: 1px solid var(--border); border-radius: 3px; color: var(--text); font-family: 'Overpass Mono', monospace; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; padding: 0.6rem 1.5rem; cursor: pointer; transition: border-color 0.15s; }
+.es-add:hover { border-color: var(--text); }
+
+.book-card { cursor: pointer; display: flex; flex-direction: column; gap: 0.6rem; position: relative; transition: transform 0.18s; }
+.book-card:hover { transform: translateY(-3px); }
+.book-cover {
+  width: 100%; aspect-ratio: 2/3; border-radius: 3px; overflow: hidden;
+  background: var(--surface); border: 1px solid var(--border); position: relative;
+  box-shadow: 3px 4px 16px rgba(0,0,0,0.18);
+}
+.book-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cover-placeholder { width: 100%; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; padding: 1rem; }
+.cover-placeholder .cp-letter { font-size: 2.5rem; font-weight: 500; opacity: 0.4; }
+.cover-placeholder .cp-title { font-family: 'Overpass Mono', monospace; font-size: 0.55rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); text-align: center; line-height: 1.5; word-break: break-word; }
+.cover-progress { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(0,0,0,0.2); }
+.cover-progress-bar { height: 100%; background: var(--text); opacity: 0.7; }
+.cover-pct { position: absolute; top: 6px; right: 6px; background: rgba(0,0,0,0.55); color: #fff; font-family: 'Overpass Mono', monospace; font-size: 0.55rem; padding: 2px 5px; border-radius: 2px; }
+.book-title-label { font-size: 0.78rem; line-height: 1.3; font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.book-author-label { font-family: 'Overpass Mono', monospace; font-size: 0.58rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-del { position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,0.55); border: none; color: #fff; width: 22px; height: 22px; border-radius: 50%; cursor: pointer; display: none; align-items: center; justify-content: center; font-size: 0.7rem; transition: background 0.15s; }
+.card-del:hover { background: #c0392b; }
+.book-card:hover .card-del { display: flex; }
+
+/* READER */
+#readerWrap { width: 100%; height: 100%; display: none; flex-direction: row; overflow: hidden; }
+#readerWrap.active { display: flex; }
+
+#sidebar {
+  width: 260px; flex-shrink: 0; border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; background: var(--surface);
+  transition: width 0.25s, opacity 0.25s; overflow: hidden;
+}
+#sidebar.collapsed { width: 0; opacity: 0; }
+.sb-header { padding: 1rem 1.25rem 0.5rem; border-bottom: 1px solid var(--border); }
+.sb-book-title { font-size: 0.82rem; font-weight: 500; line-height: 1.3; margin-bottom: 0.25rem; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.sb-book-author { font-family: 'Overpass Mono', monospace; font-size: 0.6rem; color: var(--muted); }
+.sb-tabs { display: flex; border-bottom: 1px solid var(--border); }
+.sb-tab { flex: 1; padding: 0.65rem 0.5rem; background: none; border: none; font-family: 'Overpass Mono', monospace; font-size: 0.58rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s; }
+.sb-tab.active { color: var(--text); border-bottom-color: var(--text); }
+#tocPane, #bmPane { flex: 1; overflow-y: auto; display: none; }
+#tocPane.active, #bmPane.active { display: block; }
+.toc-item { display: block; width: 100%; text-align: left; background: none; border: none; padding: 0.6rem 1.25rem; font-family: 'Lora', serif; font-size: 0.82rem; color: var(--text); cursor: pointer; border-left: 2px solid transparent; transition: background 0.12s, border-color 0.12s; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toc-item:hover { background: var(--prog-bg); }
+.toc-item.active { border-left-color: var(--text); font-weight: 500; }
+.bm-card { padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.12s; }
+.bm-card:hover { background: var(--prog-bg); }
+.bm-ch { font-family: 'Overpass Mono', monospace; font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 0.3rem; }
+.bm-prev { font-size: 0.78rem; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bm-del { background: none; border: none; cursor: pointer; color: var(--muted); font-family: 'Overpass Mono', monospace; font-size: 0.55rem; margin-top: 0.4rem; display: block; transition: color 0.12s; }
+.bm-del:hover { color: var(--text); }
+.sb-empty { padding: 2rem 1.25rem; font-family: 'Overpass Mono', monospace; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); text-align: center; }
+
+#readerMain { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+#readerBar { height: 44px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.5rem; padding: 0 0.75rem; flex-shrink: 0; position: relative; }
+.rb-btn { background: none; border: none; cursor: pointer; color: var(--muted); padding: 6px; border-radius: 3px; transition: color 0.15s; display: flex; align-items: center; }
+.rb-btn:hover { color: var(--text); }
+.rb-btn svg { width: 16px; height: 16px; }
+.rb-title { font-family: 'Overpass Mono', monospace; font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); flex: 1; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 0.5rem; }
+.rb-pct { font-family: 'Overpass Mono', monospace; font-size: 0.6rem; color: var(--muted); }
+#rdProgressWrap { position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--prog-bg); }
+#rdProgressBar { height: 100%; background: var(--text); transition: width 0.4s; }
+
+#contentArea { flex: 1; overflow-y: auto; padding: 3.5rem max(calc((100% - var(--mw))/2), 2rem); scroll-behavior: smooth; }
+#bookContent { max-width: var(--mw); margin: 0 auto; }
+
+#bookContent h1, #bookContent h2, #bookContent h3,
+#bookContent h4, #bookContent h5, #bookContent h6 { font-family: 'Lora', serif; font-weight: 500; margin: 2.5rem 0 1rem; line-height: 1.3; }
+#bookContent h1 { font-size: 1.55rem; }
+#bookContent h2 { font-size: 1.25rem; }
+#bookContent h3 { font-size: 1.05rem; }
+#bookContent p { margin-bottom: 1.2em; font-size: var(--fs); line-height: var(--lh); }
+#bookContent img { max-width: 100%; height: auto; border-radius: 3px; }
+#bookContent a { color: var(--text); text-decoration: underline; text-decoration-color: var(--border); cursor: pointer; }
+#bookContent table { border-collapse: collapse; width: 100%; }
+#bookContent td, #bookContent th { border: 1px solid var(--border); padding: 0.5em; font-size: 0.9rem; }
+#bookContent blockquote { border-left: 2px solid var(--border); padding-left: 1.25rem; color: var(--muted); font-style: italic; margin: 1.5rem 0; }
+
+#chapterNav { display: flex; align-items: center; justify-content: center; gap: 2rem; padding: 2rem 1.5rem 3rem; border-top: 1px solid var(--border); margin-top: 1.5rem; }
+.nav-btn { background: none; border: 1px solid var(--border); border-radius: 3px; color: var(--text); font-family: 'Overpass Mono', monospace; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; padding: 0.6rem 1.2rem; cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.nav-btn:hover { border-color: var(--text); background: var(--prog-bg); }
+.nav-btn:disabled { opacity: 0.25; cursor: default; }
+#chapterIndicator { font-family: 'Overpass Mono', monospace; font-size: 0.6rem; color: var(--muted); }
+
+#settingsDrawer { border-top: 1px solid var(--border); background: var(--surface); padding: 1rem 2rem; display: none; }
+#settingsDrawer.open { display: flex; }
+.sd-row { display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; }
+.sd-group { display: flex; align-items: center; gap: 0.75rem; font-family: 'Overpass Mono', monospace; font-size: 0.6rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+.sd-btn { background: none; border: 1px solid var(--border); border-radius: 3px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text); font-size: 1rem; transition: border-color 0.15s; }
+.sd-btn:hover { border-color: var(--text); }
+#fsSizeDisplay { font-size: 0.6rem; min-width: 2.5em; text-align: center; }
+.toggle { position: relative; width: 36px; height: 20px; cursor: pointer; }
+.toggle input { opacity: 0; width: 0; height: 0; }
+.toggle-track { position: absolute; inset: 0; background: var(--prog-bg); border: 1px solid var(--border); border-radius: 10px; transition: background 0.2s; }
+.toggle input:checked + .toggle-track { background: var(--text); border-color: var(--text); }
+.toggle-thumb { position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--bg); transition: transform 0.2s; }
+.toggle input:checked ~ .toggle-thumb { transform: translateX(16px); }
+
+/* Loading overlay */
+#loadingOverlay { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1rem; z-index: 999; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+#loadingOverlay.active { opacity: 1; pointer-events: all; }
+.loading-spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--text); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-family: 'Overpass Mono', monospace; font-size: 0.6rem; letter-spacing: 0.3em; text-transform: uppercase; color: var(--muted); }
+
+/* ── UPDATE BANNER ── */
+#updateBanner {
+  position: fixed; bottom: 1.5rem; right: 1.5rem;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 4px; padding: 0.9rem 1.25rem;
+  display: none; align-items: center; gap: 1rem;
+  box-shadow: var(--shadow); z-index: 999;
+  animation: slideUp 0.3s ease;
+}
+#updateBanner.visible { display: flex; }
+@keyframes slideUp {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+.ub-text {
+  font-family: 'Overpass Mono', monospace;
+  font-size: 0.62rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted);
+}
+.ub-btn {
+  background: var(--text); color: var(--bg);
+  border: none; border-radius: 3px; cursor: pointer;
+  font-family: 'Overpass Mono', monospace;
+  font-size: 0.6rem; letter-spacing: 0.15em;
+  text-transform: uppercase; padding: 0.45rem 0.9rem;
+  transition: opacity 0.15s;
+}
+.ub-btn:hover { opacity: 0.8; }
+.ub-dismiss {
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); font-size: 1rem; line-height: 1;
+  padding: 0 0.2rem;
+}
+</style>
+</head>
+<body>
+
+<div id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Opening book…</div>
+</div>
+
+<!-- TITLEBAR -->
+<div id="titlebar">
+  <span class="tb-logo">Folio</span>
+  <div class="tb-spacer"></div>
+  <div class="win-btns">
+    <button class="win-btn" onclick="window.electron.minimize()">
+      <svg viewBox="0 0 11 1"><line x1="0" y1="0.5" x2="11" y2="0.5" stroke="currentColor" stroke-width="1.2"/></svg>
+    </button>
+    <button class="win-btn" onclick="window.electron.maximize()">
+      <svg viewBox="0 0 11 11"><rect x="0.6" y="0.6" width="9.8" height="9.8" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>
+    </button>
+    <button class="win-btn close" onclick="window.electron.close()">
+      <svg viewBox="0 0 11 11"><line x1="0.5" y1="0.5" x2="10.5" y2="10.5" stroke="currentColor" stroke-width="1.3"/><line x1="10.5" y1="0.5" x2="0.5" y2="10.5" stroke="currentColor" stroke-width="1.3"/></svg>
+    </button>
+  </div>
+</div>
+
+<div id="app">
+  <!-- LIBRARY -->
+  <div id="library">
+    <div class="lib-header">
+      <span class="lib-title">Library</span>
+      <span class="lib-count" id="libCount"></span>
+      <div class="lib-actions">
+        <button class="lib-btn" onclick="addBook()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/></svg>
+          Add Book
+        </button>
+        <button class="lib-btn" onclick="toggleDark()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="3.5"/><line x1="8" y1="1" x2="8" y2="2.5"/><line x1="8" y1="13.5" x2="8" y2="15"/><line x1="1" y1="8" x2="2.5" y2="8"/><line x1="13.5" y1="8" x2="15" y2="8"/><line x1="3" y1="3" x2="4.1" y2="4.1"/><line x1="11.9" y1="11.9" x2="13" y2="13"/><line x1="13" y1="3" x2="11.9" y2="4.1"/><line x1="4.1" y1="11.9" x2="3" y2="13"/></svg>
+          Theme
+        </button>
+      </div>
+    </div>
+    <div id="bookGrid">
+      <div id="emptyState">
+        <div class="es-icon">
+          <svg viewBox="0 0 80 80" fill="none" stroke="currentColor" stroke-width="1.2">
+            <rect x="16" y="10" width="36" height="50" rx="3"/>
+            <path d="M52 10l12 10v44a3 3 0 01-3 3H20"/>
+            <line x1="24" y1="28" x2="44" y2="28"/>
+            <line x1="24" y1="36" x2="44" y2="36"/>
+            <line x1="24" y1="44" x2="36" y2="44"/>
+          </svg>
+        </div>
+        <p>Your library is empty.<br>Add an EPUB to get started.</p>
+        <button class="es-add" onclick="addBook()">+ Add Book</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- READER -->
+  <div id="readerWrap">
+    <div id="sidebar">
+      <div class="sb-header">
+        <div class="sb-book-title" id="sbTitle">—</div>
+        <div class="sb-book-author" id="sbAuthor"></div>
+      </div>
+      <div class="sb-tabs">
+        <button class="sb-tab active" data-t="toc" onclick="switchTab('toc')">Chapters</button>
+        <button class="sb-tab" data-t="bm" onclick="switchTab('bm')">Bookmarks</button>
+      </div>
+      <div id="tocPane" class="active"></div>
+      <div id="bmPane"></div>
+    </div>
+
+    <div id="readerMain">
+      <div id="readerBar">
+        <button class="rb-btn" title="Library" onclick="goLibrary()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 12V4l5-3 5 3v8"/><rect x="6" y="8" width="4" height="4" rx="0.5"/></svg>
+        </button>
+        <button class="rb-btn" title="Toggle sidebar" onclick="toggleSidebar()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="1" y="2" width="14" height="12" rx="2"/><line x1="6" y1="2" x2="6" y2="14"/></svg>
+        </button>
+        <span class="rb-title" id="readerTitle">—</span>
+        <span class="rb-pct" id="rdPct">0%</span>
+        <button class="rb-btn" title="Bookmark (B)" onclick="addBookmark()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" id="bmIcon"><path d="M4 2h8v12l-4-3-4 3V2z"/></svg>
+        </button>
+        <button class="rb-btn" title="Settings" onclick="toggleSettings()">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="8" r="2.2"/><path d="M8 1v1.4M8 13.6V15M1 8h1.4M13.6 8H15M3.1 3.1l1 1M11.9 11.9l1 1M12.9 3.1l-1 1M4.1 11.9l-1 1"/></svg>
+        </button>
+        <div id="rdProgressWrap"><div id="rdProgressBar" style="width:0%"></div></div>
+      </div>
+
+      <div id="settingsDrawer">
+        <div class="sd-row">
+          <div class="sd-group">
+            Font Size
+            <button class="sd-btn" onclick="changeFontSize(-1)">−</button>
+            <span id="fsSizeDisplay">18</span>
+            <button class="sd-btn" onclick="changeFontSize(1)">+</button>
+          </div>
+          <div class="sd-group">
+            Width
+            <button class="sd-btn" onclick="changeWidth(-60)">−</button>
+            <button class="sd-btn" onclick="changeWidth(60)">+</button>
+          </div>
+          <div class="sd-group">
+            Dark Mode
+            <label class="toggle">
+              <input type="checkbox" id="darkToggle" onchange="setDark(this.checked)">
+              <div class="toggle-track"></div>
+              <div class="toggle-thumb"></div>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div id="contentArea" onscroll="onScroll()">
+        <div id="bookContent"></div>
+        <nav id="chapterNav">
+          <button class="nav-btn" id="prevBtn" onclick="prevChapter()">← Prev</button>
+          <span id="chapterIndicator">— / —</span>
+          <button class="nav-btn" id="nextBtn" onclick="nextChapter()">Next →</button>
+        </nav>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──
+let library = [];
+let chapters = [];
+let currentChapter = 0;
+let currentBookIdx = -1;
+let settingsOpen = false;
+let sidebarOpen = true;
+let fontSize = 18;
+let maxWidth = 640;
+let darkMode = true;
+let bookmarks = [];
+let currentZip = null;
+let currentBase = '';
+
+// ── INIT ──
+async function init() {
+  library = await window.electron.loadLibrary() || [];
+  darkMode = library[0]?.darkMode ?? true;
+  applyTheme();
+  renderLibrary();
+}
+init();
+
+// ── LOADING ──
+function showLoading(msg) {
+  const o = document.getElementById('loadingOverlay');
+  o.querySelector('.loading-text').textContent = msg || 'Opening book…';
+  o.classList.add('active');
+}
+function hideLoading() { document.getElementById('loadingOverlay').classList.remove('active'); }
+
+// ── THEME ──
+function applyTheme() {
+  document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+  document.getElementById('darkToggle').checked = darkMode;
+}
+function toggleDark() { setDark(!darkMode); }
+function setDark(val) {
+  darkMode = val; applyTheme();
+  if (currentBookIdx >= 0) { library[currentBookIdx].darkMode = darkMode; saveLibrary(); }
+}
+
+// ── LIBRARY ──
+function saveLibrary() { window.electron.saveLibrary(library); }
+
+function renderLibrary() {
+  const grid = document.getElementById('bookGrid');
+  const empty = document.getElementById('emptyState');
+  document.getElementById('libCount').textContent = library.length ? library.length + ' book' + (library.length > 1 ? 's' : '') : '';
+  grid.querySelectorAll('.book-card').forEach(c => c.remove());
+  if (!library.length) { empty.style.display = 'flex'; return; }
+  empty.style.display = 'none';
+  library.forEach((book, i) => {
+    const card = document.createElement('div');
+    card.className = 'book-card';
+    const pct = Math.round(book.pct || 0);
+    const mime = book.coverMime || 'image/jpeg';
+    const coverHtml = book.cover ? '<img src="data:' + mime + ';base64,' + book.cover + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'" alt="">' : '';
+    const placeholderStyle = book.cover ? 'style="display:none"' : '';
+    card.innerHTML =
+      '<div class="book-cover">' +
+        coverHtml +
+        '<div class="cover-placeholder" ' + placeholderStyle + '>' +
+          '<span class="cp-letter">' + esc((book.title||'?')[0].toUpperCase()) + '</span>' +
+          '<span class="cp-title">' + esc(book.title) + '</span>' +
+        '</div>' +
+        (pct > 0 ? '<span class="cover-pct">' + pct + '%</span>' : '') +
+        '<div class="cover-progress"><div class="cover-progress-bar" style="width:' + pct + '%"></div></div>' +
+      '</div>' +
+      '<div class="book-title-label">' + esc(book.title) + '</div>' +
+      (book.author ? '<div class="book-author-label">' + esc(book.author) + '</div>' : '') +
+      '<button class="card-del" title="Remove" onclick="removeBook(' + i + ', event)">×</button>';
+    card.addEventListener('click', () => openBook(i));
+    grid.appendChild(card);
+  });
+}
+
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+async function addBook() {
+  const filePath = await window.electron.openFileDialog();
+  if (!filePath) return;
+  showLoading('Reading file…');
+  const b64 = await window.electron.readEpub(filePath);
+  if (!b64) { hideLoading(); return; }
+  await parseAndAddEpub(b64, filePath);
+}
+
+// ── PATH UTILS ──
+function normalizePath(base, href) {
+  // Strip fragment
+  const frag = href.includes('#') ? href.slice(href.indexOf('#') + 1) : '';
+  const clean = href.includes('#') ? href.slice(0, href.indexOf('#')) : href;
+  if (!clean) return { path: '', frag };
+  // Absolute path in zip
+  if (clean.startsWith('/')) return { path: clean.replace(/^\/+/, ''), frag };
+  // Combine base + relative href and resolve ../ and ./
+  const combined = (base + clean).split('/');
+  const out = [];
+  for (const p of combined) {
+    if (p === '..') out.pop();
+    else if (p !== '.' && p !== '') out.push(p);
+  }
+  return { path: out.join('/'), frag };
+}
+
+// Try every plausible path variant to find a file in the zip
+async function zipFind(zip, base, href, mode) {
+  const decoded = decodeURIComponent(href);
+  const { path: resolved } = normalizePath(base, decoded);
+  const { path: resolvedRaw } = normalizePath(base, href);
+  const bare = decoded.split('/').pop().split('#')[0];
+  const barePath = base + bare;
+
+  const candidates = [
+    resolved, resolvedRaw,
+    decoded, href,
+    base + decoded, base + href,
+    barePath, bare,
+    // handle sub-subdirectory EPUBs
+    base + decoded.replace(/^.*\//, ''),
+  ].filter(Boolean);
+
+  // Remove duplicates
+  const seen = new Set();
+  const unique = candidates.filter(c => { if (seen.has(c)) return false; seen.add(c); return true; });
+
+  for (const c of unique) {
+    try {
+      const f = zip.file(c);
+      if (f) return mode === 'text' ? await f.async('text') : await f.async('uint8array');
+    } catch(e) {}
+  }
+
+  // Last resort: case-insensitive scan of all zip entries
+  const lowerResolved = (resolved || bare).toLowerCase();
+  const lowerBare = bare.toLowerCase();
+  let found = null;
+  zip.forEach((rel, f) => {
+    if (found) return;
+    const lrel = rel.toLowerCase();
+    if (lrel === lowerResolved || lrel.endsWith('/' + lowerBare) || lrel === lowerBare) found = f;
+  });
+  if (found) return mode === 'text' ? await found.async('text') : await found.async('uint8array');
+  return mode === 'text' ? '' : null;
+}
+
+async function zipReadText(zip, base, href) { return zipFind(zip, base, href, 'text'); }
+async function zipReadBytes(zip, base, href) { return zipFind(zip, base, href, 'bytes'); }
+
+// ── PARSE EPUB ──
+async function parseEpub(b64) {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const zip = await JSZip.loadAsync(bytes.buffer);
+
+  // 1. Find OPF path via container.xml
+  let opfPath = '';
+  const cxml = await zip.file('META-INF/container.xml')?.async('text').catch(() => '');
+  if (cxml) { const m = cxml.match(/full-path="([^"]+)"/i); if (m) opfPath = m[1]; }
+  // Fallback: scan zip for .opf
+  if (!opfPath) zip.forEach((rel) => { if (!opfPath && rel.endsWith('.opf')) opfPath = rel; });
+  if (!opfPath) return null;
+
+  const opfText = await zip.file(opfPath)?.async('text').catch(() => null);
+  if (!opfText) return null;
+
+  const base = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/') + 1) : '';
+  const parser = new DOMParser();
+  const opf = parser.parseFromString(opfText, 'application/xml');
+
+  // 2. Build manifest map  id -> {href, type, props}
+  const manifest = {};
+  opf.querySelectorAll('manifest item').forEach(el => {
+    const id = el.getAttribute('id');
+    if (id) manifest[id] = {
+      href: el.getAttribute('href') || '',
+      type: (el.getAttribute('media-type') || '').toLowerCase(),
+      props: (el.getAttribute('properties') || '').toLowerCase()
+    };
+  });
+
+  // 3. Spine — include ALL itemrefs (linear and non-linear)
+  const spineRefs = [...opf.querySelectorAll('spine itemref')];
+  const spineIds = spineRefs.map(el => el.getAttribute('idref')).filter(Boolean);
+
+  // 4. Load every spine document
+  const spineChapters = [];
+  for (const id of spineIds) {
+    const item = manifest[id];
+    if (!item || !item.href) continue;
+    const t = item.type;
+    // Skip non-HTML types
+    if (t && !t.includes('html') && !t.includes('xml') && !t.includes('xhtml') && t !== '') {
+      if (t.includes('image') || t.includes('font') || t.includes('css') || t.includes('audio') || t.includes('video') || t.includes('ncx')) continue;
+    }
+    const text = await zipReadText(zip, base, item.href);
+    // Only include if it actually has body content
+    if (text && text.trim().length > 20) {
+      spineChapters.push({ id, href: item.href, text, title: '' });
+    }
+  }
+
+  // 5. Extract titles from NCX (EPUB2)
+  const ncxItem = Object.values(manifest).find(i => i.type.includes('ncx') || i.href.endsWith('.ncx'));
+  let hasNcxTitles = false;
+  if (ncxItem && ncxItem.href) {
+    const ncxText = await zipReadText(zip, base, ncxItem.href);
+    if (ncxText) {
+      const ncx = parser.parseFromString(ncxText, 'application/xml');
+      const map = {};
+      ncx.querySelectorAll('navPoint').forEach(p => {
+        const rawSrc = p.querySelector('content')?.getAttribute('src') || '';
+        const src = rawSrc.split('#')[0];
+        const bare = src.split('/').pop();
+        const label = p.querySelector('navLabel text')?.textContent?.trim() || '';
+        if (label) {
+          [src, bare, decodeURIComponent(src), decodeURIComponent(bare)].forEach(k => { if (k) map[k] = label; });
+        }
+      });
+      spineChapters.forEach(ch => {
+        const bare = ch.href.split('/').pop().split('#')[0];
+        const decoded = decodeURIComponent(ch.href);
+        const decodedBare = decodeURIComponent(bare);
+        ch.title = map[ch.href] || map[bare] || map[decoded] || map[decodedBare] || '';
+        if (ch.title) hasNcxTitles = true;
+      });
+    }
+  }
+
+  // 6. Extract titles from NAV doc (EPUB3)
+  if (!hasNcxTitles) {
+    const navItem = Object.values(manifest).find(i =>
+      i.props.includes('nav') ||
+      (i.type.includes('html') && /nav/i.test(i.href))
+    );
+    if (navItem && navItem.href) {
+      const navText = await zipReadText(zip, base, navItem.href);
+      if (navText) {
+        const navDoc = parser.parseFromString(navText, 'text/html');
+        const map = {};
+        // Look in toc nav specifically
+        const tocNav = navDoc.querySelector('nav[epub\\:type="toc"], nav#toc, nav') ;
+        const anchors = tocNav ? tocNav.querySelectorAll('a') : navDoc.querySelectorAll('a[href]');
+        anchors.forEach(a => {
+          const rawHref = (a.getAttribute('href') || '').split('#')[0];
+          const bare = rawHref.split('/').pop();
+          const label = a.textContent.trim();
+          if (label && rawHref) {
+            map[rawHref] = label;
+            map[bare] = label;
+            map[decodeURIComponent(rawHref)] = label;
+            map[decodeURIComponent(bare)] = label;
+          }
+        });
+        spineChapters.forEach(ch => {
+          if (ch.title) return;
+          const bare = ch.href.split('/').pop().split('#')[0];
+          ch.title = map[ch.href] || map[bare] || map[decodeURIComponent(ch.href)] || map[decodeURIComponent(bare)] || '';
+        });
+      }
+    }
+  }
+
+  // 7. Fallback: extract title from HTML content
+  spineChapters.forEach((ch, i) => {
+    if (!ch.title) {
+      // Try <title>, then first <h1>, then first <h2>
+      let m = ch.text.match(/<title[^>]*>\s*([^<]{1,120})\s*<\/title>/i);
+      if (!m) m = ch.text.match(/<h1[^>]*>\s*([^<]{1,120})\s*<\/h1>/i);
+      if (!m) m = ch.text.match(/<h2[^>]*>\s*([^<]{1,120})\s*<\/h2>/i);
+      ch.title = m ? m[1].replace(/<[^>]+>/g, '').replace(/\s+/g,' ').trim() : 'Section ' + (i + 1);
+    }
+  });
+
+  // 8. Extract cover image
+  let coverB64 = null;
+  let coverMime = 'image/jpeg';
+  const coverMeta = opf.querySelector('meta[name="cover"]');
+  const coverId = coverMeta?.getAttribute('content');
+  let coverItem = coverId ? manifest[coverId] : null;
+  if (!coverItem) coverItem = Object.values(manifest).find(i => i.props.includes('cover-image'));
+  if (!coverItem) coverItem = Object.values(manifest).find(i => i.type.startsWith('image') && /cover/i.test(i.href));
+  // Also try finding any image in the first spine chapter that looks like a cover page
+  if (!coverItem) {
+    const firstCh = spineChapters[0];
+    if (firstCh) {
+      const imgMatch = firstCh.text.match(/src="([^"]+\.(jpg|jpeg|png|gif|webp))"/i);
+      if (imgMatch) {
+        const imgHref = imgMatch[1];
+        const found = Object.values(manifest).find(i => i.href.endsWith(imgHref.split('/').pop()));
+        if (found) coverItem = found;
+      }
+    }
+  }
+  if (coverItem && coverItem.href) {
+    coverMime = coverItem.type || 'image/jpeg';
+    if (!coverMime.startsWith('image/')) coverMime = 'image/jpeg';
+    const buf = await zipReadBytes(zip, base, coverItem.href);
+    if (buf) {
+      // Convert to base64 using FileReader (avoids stack overflow on large images)
+      coverB64 = await new Promise(resolve => {
+        const blob = new Blob([buf], { type: coverMime });
+        const reader = new FileReader();
+        reader.onload = () => {
+          // Strip the data:mime;base64, prefix — we store raw b64
+          const result = reader.result;
+          resolve(result.split(',')[1] || null);
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    }
+  }
+
+  const title = opf.querySelector('metadata > dc\\:title, metadata > title, dc\\:title, title')?.textContent?.trim() || 'Untitled';
+  const author = opf.querySelector('metadata > dc\\:creator, metadata > creator, dc\\:creator, creator')?.textContent?.trim() || '';
+
+  return { zip, base, title, author, coverB64, coverMime, chapters: spineChapters };
+}
+
+async function parseAndAddEpub(b64, filePath) {
+  const result = await parseEpub(b64);
+  hideLoading();
+  if (!result) { alert('Could not parse EPUB.'); return; }
+
+  const key = result.title.replace(/\s+/g,'_').slice(0,40) + '_' + filePath.length;
+  const existing = library.findIndex(b => b.key === key);
+  if (existing >= 0) { currentZip = result.zip; currentBase = result.base; openBook(existing); return; }
+
+  library.push({ key, title: result.title, author: result.author, cover: result.coverB64, coverMime: result.coverMime || 'image/jpeg', filePath, chapter: 0, scrollTop: 0, pct: 0, bookmarks: [], fontSize: 18, maxWidth: 640, darkMode });
+  saveLibrary();
+  renderLibrary();
+  currentZip = result.zip;
+  currentBase = result.base;
+  await loadChapters(result, library.length - 1);
+}
+
+function removeBook(i, e) {
+  e.stopPropagation();
+  library.splice(i, 1);
+  saveLibrary();
+  renderLibrary();
+}
+
+// ── OPEN BOOK ──
+async function openBook(idx) {
+  showLoading('Opening book…');
+  currentBookIdx = idx;
+  const book = library[idx];
+
+  const b64 = await window.electron.readEpub(book.filePath);
+  if (!b64) { hideLoading(); alert('Could not open file. Has it been moved?'); return; }
+
+  const result = await parseEpub(b64);
+  hideLoading();
+  if (!result) { alert('Could not parse EPUB.'); return; }
+
+  currentZip = result.zip;
+  currentBase = result.base;
+  await loadChapters(result, idx);
+}
+
+async function loadChapters(result, idx) {
+  currentBookIdx = idx;
+  const book = library[idx];
+  chapters = result.chapters;
+
+  fontSize = book.fontSize || 18;
+  maxWidth = book.maxWidth || 640;
+  darkMode = book.darkMode ?? true;
+  bookmarks = book.bookmarks || [];
+  currentChapter = Math.min(book.chapter || 0, chapters.length - 1);
+  applyFontSize(); applyWidth(); applyTheme();
+
+  document.getElementById('sbTitle').textContent = result.title;
+  document.getElementById('sbAuthor').textContent = result.author || '';
+  document.getElementById('readerTitle').textContent = result.title;
+
+  document.getElementById('library').classList.add('hidden');
+  document.getElementById('readerWrap').classList.add('active');
+
+  renderTOC();
+  renderChapter(currentChapter, () => {
+    document.getElementById('contentArea').scrollTop = book.scrollTop || 0;
+    updateProgress();
+  });
+}
+
+// ── LIBRARY NAV ──
+function goLibrary() {
+  document.getElementById('readerWrap').classList.remove('active');
+  document.getElementById('library').classList.remove('hidden');
+  chapters = []; currentChapter = 0; currentBookIdx = -1;
+  currentZip = null; currentBase = '';
+  renderLibrary();
+}
+
+// ── RENDER CHAPTER ──
+function renderChapter(idx, cb) {
+  currentChapter = Math.max(0, Math.min(idx, chapters.length - 1));
+  const ch = chapters[currentChapter];
+  if (!ch) return;
+
+  const p = new DOMParser();
+  const doc = p.parseFromString(ch.text, 'text/html');
+
+  // Remove scripts and styles
+  doc.querySelectorAll('script, style, link[rel="stylesheet"]').forEach(el => el.remove());
+
+  // Remove images (can't load from zip cross-origin)
+  doc.querySelectorAll('img, svg image').forEach(el => el.remove());
+
+  // Intercept ALL anchor clicks BEFORE inserting to DOM
+  doc.querySelectorAll('a[href]').forEach(a => {
+    const href = a.getAttribute('href') || '';
+    // Strip href so browser never tries to navigate
+    a.removeAttribute('href');
+    a.setAttribute('data-href', href);
+    a.style.cursor = 'pointer';
+  });
+
+  document.getElementById('bookContent').innerHTML = doc.body?.innerHTML || ch.text;
+
+  // Attach click handlers for internal links
+  document.getElementById('bookContent').querySelectorAll('a[data-href]').forEach(a => {
+    a.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      handleInternalLink(a.getAttribute('data-href'));
+    });
+  });
+
+  document.getElementById('prevBtn').disabled = currentChapter === 0;
+  document.getElementById('nextBtn').disabled = currentChapter === chapters.length - 1;
+  document.getElementById('chapterIndicator').textContent = (currentChapter+1) + ' / ' + chapters.length;
+  document.getElementById('contentArea').scrollTop = 0;
+  updateTOCActive();
+  if (cb) requestAnimationFrame(cb);
+  saveProgress();
+}
+
+// Handle internal epub links — navigate to the right chapter+fragment
+function handleInternalLink(href) {
+  if (!href) return;
+  // External links — ignore
+  if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:')) return;
+
+  const fragment = href.includes('#') ? href.slice(href.indexOf('#') + 1) : '';
+  const filePart = href.includes('#') ? href.slice(0, href.indexOf('#')) : href;
+
+  if (!filePart) {
+    // Same-page anchor scroll
+    if (fragment) scrollToFragment(fragment);
+    return;
+  }
+
+  // Find matching chapter
+  const bare = filePart.split('/').pop();
+  const targetIdx = chapters.findIndex(ch => {
+    const chBare = ch.href.split('/').pop().split('#')[0];
+    return ch.href === filePart || chBare === bare || ch.href.endsWith(filePart);
+  });
+
+  if (targetIdx >= 0) {
+    renderChapter(targetIdx, () => {
+      if (fragment) setTimeout(() => scrollToFragment(fragment), 100);
+    });
+  } else {
+    // Fragment-only or can't find — try scrolling current chapter
+    if (fragment) scrollToFragment(fragment);
+  }
+}
+
+function scrollToFragment(id) {
+  const el = document.getElementById(id) || document.querySelector('[name="' + id + '"]');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function prevChapter() { if (currentChapter > 0) renderChapter(currentChapter - 1); }
+function nextChapter() { if (currentChapter < chapters.length - 1) renderChapter(currentChapter + 1); }
+
+// ── PROGRESS ──
+function getGlobalPct() {
+  const ca = document.getElementById('contentArea');
+  const chunkPct = 1 / chapters.length;
+  const donePct = currentChapter / chapters.length;
+  const sh = ca.scrollHeight - ca.clientHeight;
+  const within = sh > 0 ? ca.scrollTop / sh : 0;
+  return (donePct + within * chunkPct) * 100;
+}
+
+function updateProgress() {
+  const pct = getGlobalPct();
+  document.getElementById('rdProgressBar').style.width = pct + '%';
+  document.getElementById('rdPct').textContent = Math.round(pct) + '%';
+}
+
+let scrollTimer;
+function onScroll() {
+  updateProgress();
+  clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(saveProgress, 800);
+}
+
+function saveProgress() {
+  if (currentBookIdx < 0) return;
+  const ca = document.getElementById('contentArea');
+  library[currentBookIdx] = Object.assign({}, library[currentBookIdx], {
+    chapter: currentChapter,
+    scrollTop: ca.scrollTop,
+    pct: getGlobalPct(),
+    bookmarks, fontSize, maxWidth, darkMode
+  });
+  saveLibrary();
+}
+
+// ── TOC ──
+function renderTOC() {
+  const pane = document.getElementById('tocPane');
+  pane.innerHTML = '';
+  chapters.forEach((ch, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'toc-item' + (i === currentChapter ? ' active' : '');
+    btn.textContent = ch.title || 'Section ' + (i+1);
+    btn.onclick = () => renderChapter(i);
+    pane.appendChild(btn);
+  });
+}
+function updateTOCActive() {
+  document.querySelectorAll('.toc-item').forEach((el, i) => el.classList.toggle('active', i === currentChapter));
+}
+
+// ── SIDEBAR ──
+let activeTab = 'toc';
+function switchTab(t) {
+  activeTab = t;
+  document.querySelectorAll('.sb-tab').forEach(b => b.classList.toggle('active', b.dataset.t === t));
+  document.getElementById('tocPane').classList.toggle('active', t === 'toc');
+  document.getElementById('bmPane').classList.toggle('active', t === 'bm');
+  if (t === 'bm') renderBookmarks();
+}
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  document.getElementById('sidebar').classList.toggle('collapsed', !sidebarOpen);
+}
+
+// ── BOOKMARKS ──
+function addBookmark() {
+  const ca = document.getElementById('contentArea');
+  const scrollTop = ca.scrollTop;
+  const ch = chapters[currentChapter];
+  const text = document.getElementById('bookContent').innerText;
+  const preview = text.trim().split(/\s+/).slice(0,15).join(' ') + '…';
+  const existing = bookmarks.findIndex(b => b.chapterIdx === currentChapter && Math.abs(b.scrollTop - scrollTop) < 60);
+  if (existing !== -1) bookmarks.splice(existing, 1);
+  else bookmarks.push({ chapterIdx: currentChapter, scrollTop, preview, chapterTitle: ch.title || 'Section ' + (currentChapter+1) });
+  const icon = document.getElementById('bmIcon');
+  icon.style.stroke = 'var(--text)'; setTimeout(() => icon.style.stroke = '', 600);
+  saveProgress();
+  if (activeTab === 'bm') renderBookmarks();
+}
+
+function renderBookmarks() {
+  const pane = document.getElementById('bmPane');
+  pane.innerHTML = '';
+  if (!bookmarks.length) { pane.innerHTML = '<div class="sb-empty">No bookmarks yet</div>'; return; }
+  bookmarks.forEach((bm, i) => {
+    const div = document.createElement('div');
+    div.className = 'bm-card';
+    div.innerHTML =
+      '<div class="bm-ch">' + esc(bm.chapterTitle) + '</div>' +
+      '<div class="bm-prev">' + esc(bm.preview) + '</div>' +
+      '<button class="bm-del" onclick="deleteBm(' + i + ', event)">Remove</button>';
+    div.onclick = (e) => {
+      if (e.target.classList.contains('bm-del')) return;
+      renderChapter(bm.chapterIdx, () => { document.getElementById('contentArea').scrollTop = bm.scrollTop; });
+    };
+    pane.appendChild(div);
+  });
+}
+
+function deleteBm(i, e) {
+  e.stopPropagation();
+  bookmarks.splice(i, 1);
+  saveProgress();
+  renderBookmarks();
+}
+
+// ── SETTINGS ──
+function toggleSettings() {
+  settingsOpen = !settingsOpen;
+  document.getElementById('settingsDrawer').classList.toggle('open', settingsOpen);
+}
+function changeFontSize(d) { fontSize = Math.max(12, Math.min(28, fontSize + d)); applyFontSize(); saveProgress(); }
+function applyFontSize() { document.documentElement.style.setProperty('--fs', fontSize + 'px'); document.getElementById('fsSizeDisplay').textContent = fontSize; }
+function changeWidth(d) { maxWidth = Math.max(400, Math.min(960, maxWidth + d)); applyWidth(); saveProgress(); }
+function applyWidth() { document.documentElement.style.setProperty('--mw', maxWidth + 'px'); }
+
+// ── KEYBOARD ──
+document.addEventListener('keydown', e => {
+  if (document.getElementById('readerWrap').classList.contains('active')) {
+    if (e.key === 'ArrowRight') nextChapter();
+    if (e.key === 'ArrowLeft') prevChapter();
+    if (e.key === 'b') addBookmark();
+    if (e.key === 'Escape' && settingsOpen) toggleSettings();
+  }
+});
+
+// ── GLOBAL LINK SAFETY NET ──
+// Catch any clicks on <a> tags that might have slipped through rendering
+// and would otherwise cause Electron to navigate (black screen)
+document.addEventListener('click', e => {
+  const a = e.target.closest('a');
+  if (!a) return;
+  const href = a.getAttribute('href') || a.getAttribute('data-href') || '';
+  e.preventDefault();
+  e.stopPropagation();
+  if (href && !href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('mailto:')) {
+    handleInternalLink(href);
+  }
+}, true); // capture phase — fires before any inline handlers
+</script>
+
+<!-- UPDATE BANNER -->
+<div id="updateBanner">
+  <span class="ub-text">Update ready</span>
+  <button class="ub-btn" onclick="window.electron.installUpdate()">Restart &amp; Install</button>
+  <button class="ub-dismiss" onclick="document.getElementById('updateBanner').classList.remove('visible')" title="Dismiss">×</button>
+</div>
+</body>
+</html>
